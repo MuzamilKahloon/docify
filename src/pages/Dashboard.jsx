@@ -3,8 +3,10 @@ import {
   FaUser, FaFilePdf, FaDownload, FaEdit, FaTrash, FaPlus, 
   FaGraduationCap, FaBriefcase, FaCode, FaLinkedin, FaGithub, FaTwitter,
   FaChartLine, FaShieldAlt, FaPrint, FaUpload, FaCheck, FaTimes,
-  FaSave, FaUserPlus
+  FaSave, FaUserPlus, FaEye, FaCopy, FaEnvelope
 } from 'react-icons/fa';
+import { profileService } from '../services/api';
+import { toast } from 'react-toastify';
 
 const Dashboard = () => {
   // User data state
@@ -14,7 +16,8 @@ const Dashboard = () => {
   const [tempData, setTempData] = useState(null);
   const [cvFile, setCvFile] = useState(null);
   const [cvUploadError, setCvUploadError] = useState("");
-  const [activeTab, ] = useState("profile");
+  const [activeTab, setActiveTab] = useState("profile");
+  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState({
     education: null,
     experience: null,
@@ -23,18 +26,31 @@ const Dashboard = () => {
 
   // Initialize user data
   useEffect(() => {
-    // Check if user exists (in a real app, this would be an API call)
-    const existingUser = localStorage.getItem('docifyUser');
-    
-    if (existingUser) {
-      setUserData(JSON.parse(existingUser));
-      setTempData(JSON.parse(existingUser));
-    } else {
-      setIsNewUser(true);
-      setEditMode(true);
-      initializeNewUser();
-    }
+    loadProfile();
   }, []);
+
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      const response = await profileService.getProfile();
+      setUserData(response.data);
+      setTempData(response.data);
+    } catch (error) {
+      console.error("Error loading profile:", error);
+      // Fallback to localStorage for demo persistence if API fails
+      const existingUser = localStorage.getItem('docifyUser');
+      if (existingUser) {
+        setUserData(JSON.parse(existingUser));
+        setTempData(JSON.parse(existingUser));
+      } else {
+        setIsNewUser(true);
+        setEditMode(true);
+        initializeNewUser();
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const initializeNewUser = () => {
     const newUserTemplate = {
@@ -84,15 +100,32 @@ const Dashboard = () => {
   };
 
   // Handle CV upload
-  const handleCvUpload = (e) => {
+  const handleCvUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
       if (file.type === "application/pdf") {
         setCvUploadError("");
         setCvFile(file);
         
-        // Simulate upload process
-        setTimeout(() => {
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          const response = await profileService.uploadCv(formData);
+          
+          setTempData(prev => ({
+            ...prev,
+            cv: {
+              name: file.name,
+              url: response.data.url,
+              uploadedAt: new Date().toISOString().split('T')[0]
+            }
+          }));
+          toast.success("CV uploaded successfully!");
+        } catch (error) {
+          console.error("CV upload failed:", error);
+          toast.error("Failed to upload CV. Using local preview.");
+          
+          // Simulation fallback
           const reader = new FileReader();
           reader.onload = (event) => {
             setTempData(prev => ({
@@ -103,10 +136,11 @@ const Dashboard = () => {
                 uploadedAt: new Date().toISOString().split('T')[0]
               }
             }));
-            setCvFile(null);
           };
           reader.readAsDataURL(file);
-        }, 1500);
+        } finally {
+          setCvFile(null);
+        }
       } else {
         setCvUploadError("Only PDF files are allowed");
       }
@@ -116,7 +150,7 @@ const Dashboard = () => {
   // Add new item to array
   const addNewItem = (field) => {
     const newItem = {
-      id: Date.now(), // Temporary ID
+      id: Date.now(),
       ...(field === 'education' ? {
         degree: "",
         institution: "",
@@ -156,13 +190,24 @@ const Dashboard = () => {
   };
 
   // Save profile
-  const saveProfile = () => {
-    setUserData(tempData);
-    setEditMode(false);
-    setIsNewUser(false);
-    
-    // Save to localStorage (in a real app, this would be an API call)
-    localStorage.setItem('docifyUser', JSON.stringify(tempData));
+  const saveProfile = async () => {
+    try {
+      setLoading(true);
+      await profileService.updateProfile(tempData);
+      setUserData(tempData);
+      setEditMode(false);
+      setIsNewUser(false);
+      localStorage.setItem('docifyUser', JSON.stringify(tempData));
+      toast.success("Profile saved successfully!");
+    } catch (error) {
+      console.error("Profile save failed:", error);
+      toast.error("Failed to save to cloud. Saved locally.");
+      setUserData(tempData);
+      setEditMode(false);
+      localStorage.setItem('docifyUser', JSON.stringify(tempData));
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Print portfolio
@@ -171,34 +216,89 @@ const Dashboard = () => {
   };
 
   // Handle profile picture upload
-  const handleProfilePictureUpload = (e) => {
+  const handleProfilePictureUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await profileService.uploadProfilePicture(formData);
+        
         setTempData(prev => ({
           ...prev,
-          profilePicture: event.target.result
+          profilePicture: response.data.url
         }));
-      };
-      reader.readAsDataURL(file);
+        toast.success("Profile picture updated!");
+      } catch (error) {
+        console.error("Profile picture upload failed:", error);
+        toast.error("Failed to upload. Using local preview.");
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setTempData(prev => ({
+            ...prev,
+            profilePicture: event.target.result
+          }));
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
-  if (!userData) return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
-      <div className="animate-pulse text-white">Loading...</div>
+  if (loading || !userData) return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
+      <div className="flex flex-col items-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-400 mb-4"></div>
+        <p className="text-slate-400">Loading your professional dashboard...</p>
+      </div>
     </div>
   );
 
   return (
     <div className="min-h-screen mt-16 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
       {/* Dashboard Header */}
-      <header className="bg-white/10 backdrop-blur-lg border-b border-white/20">
+      <header className="bg-white/10 backdrop-blur-lg border-b border-white/20 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-end items-center">
-           
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            {/* Tab Navigation */}
+            <nav className="flex space-x-1 bg-black/20 p-1 rounded-xl">
+              {[
+                { id: 'profile', label: 'Edit Profile', icon: FaUser },
+                { id: 'cv', label: 'CV Module', icon: FaFilePdf },
+                { id: 'preview', label: 'Live Preview', icon: FaEye }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                    activeTab === tab.id
+                      ? 'bg-cyan-500 text-white shadow-lg'
+                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <tab.icon className="mr-2" size={14} />
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+
             <div className="flex items-center space-x-4">
+              {/* Public Link Share */}
+              <div className="hidden lg:flex items-center bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 gap-3">
+                <div className="text-xs text-white/40 uppercase font-bold tracking-wider">Public Link</div>
+                <code className="text-cyan-400 text-sm">/profile/{userData.name ? userData.name.toLowerCase().replace(/\s+/g, '-') : 'user'}</code>
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/profile/${userData.name ? userData.name.toLowerCase().replace(/\s+/g, '-') : 'user'}`);
+                    toast.success("Link copied!");
+                  }}
+                  className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-white/60 hover:text-white"
+                  title="Copy Link"
+                >
+                  <FaCopy size={12} />
+                </button>
+              </div>
+
               {editMode ? (
                 <button 
                   onClick={saveProfile}
@@ -214,9 +314,6 @@ const Dashboard = () => {
                   <FaEdit className="mr-2" /> Edit Profile
                 </button>
               )}
-              <button className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors">
-                <FaUser className="text-cyan-400" />
-              </button>
             </div>
           </div>
         </div>

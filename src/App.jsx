@@ -4,8 +4,11 @@ import Dashboard from './pages/Dashboard';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Login from './pages/Login';
-import { auth } from './components/Firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import Profile from './pages/Profile'; 
+import TemplatesPage from './pages/TemplatesPage';
+import ShowcasePage from './pages/ShowcasePage';
+import NotFound from './pages/NotFound';
+import AdminDashboard from './pages/AdminDashboard';
 import { useEffect, useState } from 'react';
 
 const App = () => {
@@ -13,12 +16,12 @@ const App = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    // Check for existing session/token in localStorage
+    const savedUser = localStorage.getItem('docify_user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+    setLoading(false);
   }, []);
 
   if (loading) {
@@ -36,10 +39,12 @@ const App = () => {
               path="/login" 
               element={user ? <Navigate to="/dashboard" /> : <Login />} 
             />
-            <Route 
-              path="/dashboard" 
-              element={user ? <Dashboard /> : <Navigate to="/login" state={{ from: '/dashboard' }} />} 
-            />
+            <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" state={{ from: '/dashboard' }} />} />
+            <Route path="/profile/:username" element={<Profile />} />
+            <Route path="/templates" element={<TemplatesPage />} />
+            <Route path="/showcase" element={<ShowcasePage />} />
+            <Route path="/admin" element={user && user.isAdmin ? <AdminDashboard /> : <Navigate to="/login" state={{ from: '/admin' }} />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
         <Footer />
@@ -49,3 +54,4 @@ const App = () => {
 };
 
 export default App;
+
