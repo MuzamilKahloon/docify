@@ -84,20 +84,36 @@ const DocifyAuthPage = () => {
       if (isLogin) {
         response = await authService.login(formData.email, formData.password);
         toast.success("Login Successful!", { position: "top-center" });
+        
+        const { user, token } = response;
+        localStorage.setItem('docify_user', JSON.stringify({ ...user, token }));
+        localStorage.setItem('token', token);
+        
+        if (user.isAdmin) {
+          navigate('/admin-dashboard', { replace: true });
+        } else {
+          navigate(location.state?.from || '/dashboard', { replace: true });
+        }
+        window.location.reload();
       } else {
-        response = await authService.register(formData.email, formData.password, formData.name);
-        toast.success("Account created successfully!", { position: "top-center" });
+        response = await authService.register(formData.name, formData.email, formData.password);
+        toast.success("Account created successfully! Please login.", { position: "top-center" });
+        
+        // Switch to login mode after successful registration
+        setIsLogin(true);
+        setFormData({ email: formData.email, password: '', name: '' });
       }
-      
-      const { user, token } = response.data;
-      localStorage.setItem('docify_user', JSON.stringify(user));
-      localStorage.setItem('token', token);
-      
-      navigate(location.state?.from || '/dashboard', { replace: true });
-      window.location.reload();
     } catch (error) {
       console.error("Auth error:", error);
       const message = error.response?.data?.message || "Authentication failed. Using fallback.";
+      const reason = error.response?.data?.reason;
+      
+      if (error.response?.status === 403) {
+        toast.error(message + (reason ? ` Reason: ${reason}` : ""), { autoClose: 5000 });
+        setIsSubmitting(false);
+        return;
+      }
+      
       toast.error(message);
 
       // Demo fallback: simulate success if backend is missing

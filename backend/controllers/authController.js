@@ -47,6 +47,20 @@ exports.loginUser = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (user && (await bcrypt.compare(password, user.password))) {
+      // Check if blocked
+      if (user.isBlocked) {
+        return res.status(403).json({ message: 'Your account has been blocked by an administrator.' });
+      }
+
+      // Check if suspended
+      if (user.suspendedUntil && user.suspendedUntil > new Date()) {
+        const remainingTime = Math.ceil((user.suspendedUntil - new Date()) / (1000 * 60));
+        return res.status(403).json({
+          message: `Your account is suspended for another ${remainingTime} minutes.`,
+          reason: user.suspensionReason
+        });
+      }
+
       res.json({
         user: {
           id: user._id,

@@ -7,6 +7,9 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, default: 'user' },
   isAdmin: { type: Boolean, default: false },
+  isBlocked: { type: Boolean, default: false },
+  suspendedUntil: { type: Date, default: null },
+  suspensionReason: { type: String, default: "" },
   createdAt: { type: Date, default: Date.now }
 });
 
